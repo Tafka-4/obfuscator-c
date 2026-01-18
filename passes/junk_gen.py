@@ -104,4 +104,4 @@ class JunkFactory:
 
     @staticmethod
     def random_suffix():
-        return "".join(random.choices("0123456789ABCDEF", k=4))
+        return "".join(random.choices("0123456789ABCDEF", k=8))

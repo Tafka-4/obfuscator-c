@@ -26,12 +26,6 @@ def create_obfuscator_header():
 #include <cstdint>
 #include <array>
 
-#if defined(__APPLE__) || defined(__linux__)
-#include <sys/ptrace.h>
-#include <sys/types.h>
-#include <unistd.h>
-#endif
-
 namespace {config.NS_NAME} {{
 
     // Global S-Box
@@ -79,13 +73,6 @@ namespace {config.NS_NAME} {{
         }}
     }};
     
-    namespace security {{
-        inline void enforce_anti_debug() {{
-            #if defined(__APPLE__)
-              ptrace(PT_TRACE_ME, 0, 0, 0);
-            #endif
-        }}
-    }}
 }}
 
 
@@ -126,4 +113,3 @@ namespace {config.NS_NAME} {{
     os.makedirs(os.path.dirname(config.OBF_LIB_PATH), exist_ok=True)
     with open(config.OBF_LIB_PATH, "w") as f:
         f.write(header_content)
-

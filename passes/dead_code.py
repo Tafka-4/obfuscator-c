@@ -1,10 +1,14 @@
 
 import random
+import string
 from .. import ast_utils
 from .mba import MBA
 
-def random_hex(length=8):
+def _rnd_hex(length=8):
     return "_" + ''.join(random.choices("0123456789ABCDEF", k=length))
+
+def _rnd_var():
+    return f"_{random.choice(string.ascii_lowercase)}{random.choice(string.ascii_lowercase)}{''.join(random.choices(string.hexdigits[:16], k=8))}"
 
 class DeadCode:
     @staticmethod
@@ -12,12 +16,11 @@ class DeadCode:
         """
         Generates a block of C++ junk code.
         """
-        var_name = "junk_" + random_hex(8)
-        ops = ['+', '-', '^'] # MBA supported ops
+        var_name = _rnd_var()
+        ops = ['+', '-', '^']
         val = random.randint(0, 1000)
         
-        code = f"    // Junk Start\n"
-        code += f"    volatile int {var_name} = {val};\n"
+        code = f"    volatile int {var_name} = {val};\n"
         code += f"    if ({var_name} < {val + 100}) {{\n"
         for _ in range(random.randint(2, 5)):
             op = random.choice(ops)
@@ -25,7 +28,6 @@ class DeadCode:
             expr = MBA.generate_expr(op, var_name, str(operand))
             code += f"        {var_name} = {expr};\n"
         code += f"    }}\n"
-        code += f"    // Junk End\n"
         return code
 
     @staticmethod
@@ -33,14 +35,15 @@ class DeadCode:
         """
         Generates a random C++ function with complex junk logic.
         """
-        name = "dummy_" + random_hex(6)
+        name = _rnd_var()
+        sv = _rnd_var()
         code = f"static void {name}() {{\n"
-        code += "    volatile int state = 0;\n"
-        code += "    while (state < 10) {\n"
-        code += "        switch(state) {\n"
+        code += f"    volatile int {sv} = 0;\n"
+        code += f"    while ({sv} < 10) {{\n"
+        code += f"        switch({sv}) {{\n"
         for i in range(10):
             code += f"            case {i}: \n"
-            code += f"                state += {random.randint(1,3)};\n"
+            code += f"                {sv} += {random.randint(1,3)};\n"
             code += f"                break;\n"
         code += "        }\n"
         code += "    }\n"

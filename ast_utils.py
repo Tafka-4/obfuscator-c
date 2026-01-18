@@ -10,35 +10,48 @@ def get_ast(file_path):
     Requires clang in PATH.
     """
     try:
-        # -fsyntax-only to speed up, -Xclang -ast-dump=json to get JSON
-        # Include src dir for headers - generalized to include all source dirs
+        # Build include flags
         include_flags = []
+        
+        # 1. Add the file's own directory first (most important for local includes)
+        file_dir = os.path.dirname(os.path.abspath(file_path))
+        include_flags.extend(["-I", file_dir])
+        
+        # 2. Add build_obfuscated/deploy where obfuscator_full.hpp is generated
+        deploy_dir = os.path.join(config.BUILD_DIR, "deploy")
+        if os.path.exists(deploy_dir):
+            include_flags.extend(["-I", deploy_dir])
+        
+        # 3. Add original source dirs
         for d in config.SOURCE_DIRS:
              include_flags.extend(["-I", d])
-             # Also add crypto subdirectory if it exists
              crypto_dir = os.path.join(d, "crypto")
              if os.path.exists(crypto_dir):
                  include_flags.extend(["-I", crypto_dir])
         
-        # Must include BUILD_DIR/src because obfuscator_full.hpp will be there
-        build_include = os.path.join(config.BUILD_DIR, "src")
-        include_flags.extend(["-I", build_include])
+        # 4. Add BUILD_DIR subdirectories
+        for subdir in ["deploy", "src", "crypto"]:
+            build_subdir = os.path.join(config.BUILD_DIR, subdir)
+            if os.path.exists(build_subdir):
+                include_flags.extend(["-I", build_subdir])
         
-        # Include build_obfuscated/src/crypto as well for generated files
-        build_crypto_include = os.path.join(config.BUILD_DIR, "src", "crypto")
-        include_flags.extend(["-I", build_crypto_include])
+        # 5. Add system headers (suppress warnings about missing system headers)
+        extra_flags = ["-Wno-everything", "-ferror-limit=0"]
 
-        cmd = ["clang", "-x", "c++", "-fsyntax-only", "-Xclang", "-ast-dump=json"] + include_flags + ["-std=c++17", file_path]
-        # print(f"    [DEBUG] Cmd: {' '.join(cmd)}")
-        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-        # if not result.stdout:
-        #      print(f"    [DEBUG] Empty stdout for {file_path}")
-        # else:
-        #      print(f"    [DEBUG] Stdout start: {result.stdout[:100]}")
-        return json.loads(result.stdout)
+        cmd = ["clang", "-x", "c++", "-fsyntax-only", "-Xclang", "-ast-dump=json"] + \
+              include_flags + extra_flags + ["-std=c++17", file_path]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+        
+        # Even with errors, clang still outputs partial AST
+        if result.stdout:
+            return json.loads(result.stdout)
+        return None
     except subprocess.CalledProcessError as e:
         print(f"[!] Failed to generate AST for {file_path}: {e}")
-        print(f"    STDERR: {e.stderr}")
+        return None
+    except subprocess.TimeoutExpired:
+        print(f"[!] AST generation timed out for {file_path}")
         return None
     except json.JSONDecodeError:
         print(f"[!] Failed to decode AST JSON for {file_path}")
@@ -85,7 +98,8 @@ def is_in_file(node, target_file):
         if rng:
             loc = rng.get("begin")
     
-    if not loc: return False # Unsafe if no loc info
+    if not loc:
+        return False  # Unsafe if no loc info
 
     # Check includedFrom first
     if loc.get("includedFrom"):
@@ -93,7 +107,16 @@ def is_in_file(node, target_file):
     
     node_file = loc.get("file")
     if not node_file:
-        return True # Missing file implies main file
+        # Some nodes only have expansion/spelling location info
+        for key in ("expansionLoc", "spellingLoc"):
+            sub_loc = loc.get(key)
+            if sub_loc and sub_loc.get("file"):
+                if sub_loc.get("includedFrom"):
+                    return False
+                node_file = sub_loc.get("file")
+                break
+    if not node_file:
+        return False  # Do not assume main file when unknown
     
     # helper to normalize
     def norm(p):

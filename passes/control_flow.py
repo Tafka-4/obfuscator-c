@@ -8,16 +8,54 @@ class ControlFlow:
     def wrap_opaque_predicates(content):
         """
         Wraps `if (cond) {` with `if ((cond) && (opaque_true)) {`
+        Uses balanced parenthesis matching to correctly capture full conditions.
         """
-        opaque_true = "((0xDEAD ^ 0xDEAD) == 0)"
+        lines = content.split('\n')
+        new_lines = []
         
-        def op_replacer(m):
-            if random.random() > 0.4: return m.group(0) 
-            cond = m.group(1)
-            return f"if (({cond}) && {opaque_true}) {{"
+        for line in lines:
+            # Skip lines with strings or comments
+            if '"' in line or '//' in line or '#' in line:
+                new_lines.append(line)
+                continue
+            
+            # Look for 'if (' pattern
+            match = re.search(r'\bif\s*\(', line)
+            if match and random.random() < 0.4:
+                start = match.end()
+                depth = 1
+                end = start
+                
+                # Find matching closing paren
+                while end < len(line) and depth > 0:
+                    if line[end] == '(':
+                        depth += 1
+                    elif line[end] == ')':
+                        depth -= 1
+                    end += 1
+                
+                if depth == 0:
+                    # Successfully found balanced parens
+                    cond = line[start:end-1]
+                    
+                    # Skip if condition is too short or contains problematic chars
+                    if len(cond) < 1 or '{' in cond or '}' in cond:
+                        new_lines.append(line)
+                        continue
+                    
+                    # Generate opaque true predicate
+                    a = random.randint(1, 255)
+                    opaque_true = f"((0x{a:02X} ^ 0x{a:02X}) == 0)"
+                    
+                    # Reconstruct line
+                    rest = line[end:]
+                    new_cond = f"if (({cond}) && {opaque_true})"
+                    line = line[:match.start()] + new_cond + rest
+            
+            new_lines.append(line)
+        
+        return '\n'.join(new_lines)
 
-        pattern = r'if\s*\((.+?)\)\s*\{'
-        return re.sub(pattern, op_replacer, content)
 
     @staticmethod
     def apply_icff(content, ast_root):

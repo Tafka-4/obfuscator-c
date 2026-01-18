@@ -77,9 +77,10 @@ class GraphGenerator:
 
     def to_cpp(self):
         # Header
-        h_code = """#pragma once
-void run_graph_wall();
-"""
+        h_code = "#pragma once\n"
+        for node in self.nodes:
+            h_code += f"void {node.name}();\n"
+        h_code += "void run_graph_wall();\n"
         
         from . import config
         cpp_code = f"""#include "graph_wall.h"
